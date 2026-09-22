@@ -18,8 +18,19 @@ BAUD=57600
 OUT1=udp:127.0.0.1:14550
 OUT2=udp:127.0.0.1:14551
 MAVPROXY=/home/sasllab/.local/bin/mavproxy.py
+LOCKFILE=/tmp/kasa_mavproxy_supervisor.lock
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
+
+# 2026-09-22 실측: 이 스크립트가 데스크톱 런처/터미널에서 여러 번 실행되면서
+# 죽지 않고 4개까지 쌓인 적이 있음 - 4개가 동시에 같은 /dev/pixhawk와
+# UDP 14550/14551 포트를 놓고 경쟁해서 파라미터/명령 전송이 불안정해질 수
+# 있었음. main.py의 단일 인스턴스 락(fcntl.flock)과 동일한 패턴으로 방지.
+exec 200>"$LOCKFILE"
+if ! flock -n 200; then
+    log "이미 다른 mavproxy_supervisor.sh 인스턴스가 실행 중 - 종료"
+    exit 0
+fi
 
 while true; do
     while [ ! -e "$DEV" ]; do

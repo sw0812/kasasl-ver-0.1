@@ -471,6 +471,13 @@ class App:
 
         self._build_ui()
 
+        # xrce는 켤 때마다 수동으로 눌러줘야 하는 게 번거롭다는 실사용 피드백
+        # (2026-09-22) -> GUI 뜰 때 기본 포트/baud로 자동 시작. PX4쪽
+        # uxrce_dds_client 자동시작 여부와는 무관한 별개 계층(Jetson agent)이라
+        # 이거 하나 켠다고 PX4쪽까지 다 해결되진 않음 - 안 붙으면 여전히 PX4
+        # 셸에서 uxrce_dds_client 재시작 필요.
+        self._toggle("xrce")
+
         rclpy.init()
         self.node = TelemetryNode(self.tele_state, self.tele_lock)
         self.spin_thread = threading.Thread(target=rclpy.spin, args=(self.node,), daemon=True)
@@ -1332,23 +1339,25 @@ class App:
                 img = PILImage.fromarray(arr_full).convert("RGB")
                 img.thumbnail(target)
                 border_color = "#34a853" if found else "#d93025"
-            elif mode == "normal":
+            else:
                 # XYZ 축을 원근 왜곡 없이 정확히 그리려면 카메라 내부파라미터가
                 # 정의된 원본 해상도에서 투영해야 하므로 축소 전에 그린다.
+                # boundary/linetrack 모드도 축소 전 프레임에 먼저 축을 그려두고,
+                # 그 다음에 (기존과 동일하게) 축소된 이미지 위에서 각자 검출을 수행한다.
                 arr_full = frame.copy()
-                found = marker_age is not None and marker_age < 2.0 and marker_info
-                if found:
-                    border_color = "#34a853"
+                aruco_found = marker_age is not None and marker_age < 2.0 and marker_info
+                if aruco_found:
                     parts = [f"ID {mid} ({dist:.2f}m)" for mid, dist in marker_info]
-                    status = "ArUco DETECTED: " + ", ".join(parts)
+                    aruco_status = "ArUco DETECTED: " + ", ".join(parts)
                     self._draw_marker_axes(arr_full)
                 else:
-                    border_color = "#d93025"
-                    status = "ArUco: searching..."
+                    aruco_status = "ArUco: searching..."
+
+                if mode == "normal":
+                    border_color = "#34a853" if aruco_found else "#d93025"
+                    status = aruco_status
+
                 img = PILImage.fromarray(arr_full).convert("RGB")
-                img.thumbnail(target)
-            else:
-                img = PILImage.fromarray(frame).convert("RGB")
                 img.thumbnail(target)
 
             if mode == "boundary":
@@ -1377,6 +1386,16 @@ class App:
             tw, th = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
             draw.rectangle([bw, bw, bw + tw + 16, bw + th + 14], fill=border_color)
             draw.text((bw + 8, bw + 6), status, fill="white", font=font)
+
+            if mode in ("boundary", "linetrack"):
+                # 상단 배너는 해당 모드 자체(경계/라인) 검출 상태용이라
+                # ArUco 상태는 하단에 별도 배너로 함께 표시한다.
+                aruco_color = "#34a853" if aruco_found else "#5f6368"
+                a_bbox = draw.textbbox((0, 0), aruco_status, font=font)
+                atw, ath = a_bbox[2] - a_bbox[0], a_bbox[3] - a_bbox[1]
+                ay1 = img.height - bw - ath - 14
+                draw.rectangle([bw, ay1, bw + atw + 16, img.height - bw], fill=aruco_color)
+                draw.text((bw + 8, ay1 + 6), aruco_status, fill="white", font=font)
 
             if self.flip_var.get():
                 # 오버레이(축/박스/텍스트)까지 다 그려진 최종 이미지를 통째로

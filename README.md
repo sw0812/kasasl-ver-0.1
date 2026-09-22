@@ -71,14 +71,14 @@ desktop_launchers/    Ubuntu 바탕화면 아이콘(.desktop) — 절대경로�
 1. **udev 규칙 설치**: `sudo cp control_panel/99-pixhawk.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`
 2. **PX4 파라미터**: 위 표대로 QGC에서 맞추고 재부팅(UART 경유 권장)
 3. **ROS2 환경 소싱**: `source /opt/ros/foxy/setup.bash && source ~/ros2_ws/install/setup.bash && export ROS_DOMAIN_ID=0`
-4. **uXRCE-DDS 에이전트**: `MicroXRCEAgent serial --dev /dev/ttyTHS0 -b 921600` (자동시작이 안 붙으면 PX4 셸에서 `uxrce_dds_client stop` 후 `uxrce_dds_client start -t serial -d /dev/ttyS6 -b 921600`로 강제 재시작 — 포트 번호는 보드마다 다를 수 있음, `ttyS0`~`ttyS7`을 돌며 MAVLink 테스트로 실측 필요)
+4. **uXRCE-DDS 에이전트**: `main.py`가 뜨면 자동으로 `MicroXRCEAgent serial --dev /dev/ttyTHS0 -b 921600`을 실행함(수동 실행 불필요). PX4 쪽 `uxrce_dds_client`도 `SER_TEL1_BAUD`가 정확히 설정돼 있으면(위 표 참고) 부팅 시 자동 연결됨 — 그래도 `Running, disconnected`로 안 붙으면 PX4 셸에서 `uxrce_dds_client stop` 후 `uxrce_dds_client start -t serial -d /dev/ttyS6 -b 921600`로 강제 재시작 (포트 번호는 보드마다 다를 수 있음, `ttyS0`~`ttyS7`을 돌며 MAVLink 테스트로 실측 필요)
 5. **카메라 + ArUco**:
    ```
    ros2 run usb_cam usb_cam_node_exe --ros-args -p video_device:=/dev/video0 -r image_raw:=/camera/image_raw -r camera_info:=/camera/camera_info
    ros2 run aruco_opencv aruco_tracker_autostart --ros-args --params-file <aruco_tracker.yaml>
    ```
 6. **위치추정 브릿지** (마커가 계속 카메라에 보여야 함): `python3 ros2_nodes/aruco_visual_odom.py --ros-args -p ref_marker_id:=0`
-7. **제어판**: `control_panel/run_main.sh` (또는 `python3 control_panel/main.py`) → GUI에서 xrce/camera/aruco 토글 켜고 마커 인식 확인 → "미션(탐색+착륙)" 버튼
+7. **제어판**: `control_panel/run_main.sh` (또는 `python3 control_panel/main.py`) → GUI에서 xrce는 자동으로 켜져 있음, camera/aruco 토글 켜고 마커 인식 확인 → 카메라 뷰 모드(일반/패드경계감지/라인트레이서) 어느 쪽이든 ArUco 축 오버레이가 같이 표시됨 → "미션(탐색+착륙)" 버튼
 
 각 재부팅/재연결 뒤에는 4~6번(에이전트, 브릿지)을 새로 띄워야 새 PX4 세션에 확실히 붙습니다(오래된 프로세스는 살아있어도 새 세션에 자동으로 안 갈아탈 수 있음 — `listener vehicle_visual_odometry`(PX4 NSH 셸)로 "최근 몇 초 이내"인지 확인 권장).
 
@@ -88,7 +88,11 @@ desktop_launchers/    Ubuntu 바탕화면 아이콘(.desktop) — 절대경로�
 - 벤치 모터 테스트는 `MAV_CMD_ACTUATOR_TEST`(disarm 전용, 위치추정 불필요) 방식(`scripts/motor_test.py`, `ros2_nodes/marker_motor_trigger.py`)을 쓰세요 — 굳이 ARM까지 갈 필요 없습니다.
 
 ## 알려진 이슈 / 미해결
-- `uxrce_dds_client` 부팅 자동시작이 가끔 안 붙어서 수동 재시작이 필요할 수 있음(포트별 baud 파라미터 오염 이력 있음 — `param show SER_TELx_BAUD`로 진짜 값 확인 권장)
-- USB가 왜 애초에 부트로더로 빠지는지 근본원인 미해결(위 탈출법은 대증요법)
+- USB가 왜 애초에 부트로더로 빠지는지 근본원인 미해결(위 탈출법은 대증요법) — 재현 빈도 높음
 - `aruco_visual_odom.py`의 카메라 오프셋(`cam_offset_*`)·마커 yaw(`ref_marker_yaw_deg`)는 기본값(0) — 실제 장착 환경에 맞게 실측 보정 필요
 - GUI(`main.py`)에 `aruco_visual_odom.py`가 서브시스템으로 통합돼 있지 않음(수동 실행)
+
+## 해결된 이슈 (참고용)
+- ~~`uxrce_dds_client` 부팅 자동시작이 가끔 안 붙는 문제~~ — 근본원인은 `SER_TEL1_BAUD`가 예전 MAVLink INT32 인코딩 버그로 오염된 값(`1231093760`)이었던 것. `struct.pack('<i',921600)`→`struct.unpack('<f',...)`로 비트 재해석해서 재설정 후, 재부팅 시 수동 개입 없이 자동 연결되는 것 확인. 새 기기에서 이 증상이 재발하면 먼저 `param show SER_TEL1_BAUD`(PX4 셸)로 진짜 값을 확인할 것.
+- `main.py`도 이제 GUI가 뜰 때 xrce(`MicroXRCEAgent`)를 기본 포트/baud로 자동 시작함(수동 토글 불필요).
+- `mavproxy_supervisor.sh`를 여러 번 실행하면 중복 실행돼 같은 시리얼 포트/UDP 포트를 놓고 경쟁하던 문제 — `flock` 기반 단일 인스턴스 락 추가로 방지.
