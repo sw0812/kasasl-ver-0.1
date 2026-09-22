@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=KASA 실기체 제어
+Comment=실기체(Pixhawk 6X + Jetson) 정밀착륙 서브시스템 제어판
+Exec=/home/sasllab/Desktop/kasa_project/run_main.sh
+Icon=utilities-terminal
+Terminal=false
+Categories=Utility;

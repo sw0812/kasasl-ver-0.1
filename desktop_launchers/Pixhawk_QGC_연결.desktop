@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=KASA Pixhawk 연결 (MAVProxy)
+Comment=Pixhawk USB(/dev/pixhawk)를 UDP 14550/14551로 중계해서 QGC가 연결되게 함
+Exec=/home/sasllab/Desktop/kasa_project/mavproxy_supervisor.sh
+Icon=utilities-terminal
+Terminal=true
+Categories=Utility;

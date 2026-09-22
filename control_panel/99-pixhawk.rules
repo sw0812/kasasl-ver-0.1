@@ -1,0 +1,5 @@
+# Pixhawk 6X (USB VID:PID 3185:0035, Auterion/PX4 FMU v6X.x)를 어떤 ttyACM
+# 번호로 잡히든 항상 /dev/pixhawk 로 고정 심볼릭 링크.
+# (2026-09-10: USB 재연결/전원 재인가마다 ttyACM 번호가 바뀌어서 mavproxy가
+# 죽은 포트를 계속 붙잡는 문제 때문에 추가)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="3185", ATTRS{idProduct}=="0035", SYMLINK+="pixhawk"
